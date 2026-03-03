@@ -190,6 +190,67 @@ describe('error handling', () => {
     });
 });
 
+describe('fetchGroupId', () => {
+    test('returns the group id on success', async () => {
+        fetchMock.mockResolvedValueOnce(mockFetchResponse(200, { group: { id: 45, name: 'test-group' } }));
+
+        const result = await manager.fetchGroupId('test-group');
+
+        expect(result).toBe(45);
+        const url = fetchMock.mock.calls[0][0];
+        expect(url).toBe(`${BASE_URL}/groups/test-group.json`);
+    });
+
+    test('throws when the API call fails', async () => {
+        fetchMock.mockResolvedValueOnce({
+            ...mockFetchResponse(404),
+            text: () => Promise.resolve('not found'),
+        } as Response);
+
+        await expect(manager.fetchGroupId('nonexistent'))
+            .rejects.toThrow('Discourse fetchGroupId failed: 404');
+    });
+
+    test('throws when group data is missing from response', async () => {
+        fetchMock.mockResolvedValueOnce(mockFetchResponse(200, {}));
+
+        await expect(manager.fetchGroupId('missing-group'))
+            .rejects.toThrow('Discourse fetchGroupId: no group data returned for "missing-group"');
+    });
+});
+
+describe('inviteUserByEmailToGroup', () => {
+    test('returns true on success', async () => {
+        fetchMock.mockResolvedValueOnce(mockFetchResponse(200));
+
+        const result = await manager.inviteUserByEmailToGroup(TEST_EMAIL, GROUP_ID);
+
+        expect(result).toBe(true);
+        const url = fetchMock.mock.calls[0][0];
+        expect(url).toBe(`${BASE_URL}/invites`);
+        const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+        expect(body.email).toBe(TEST_EMAIL);
+        expect(body.group_ids).toBe(GROUP_ID);
+        expect(body.skip_email).toBe(false);
+    });
+
+    test('returns false when API call fails', async () => {
+        fetchMock.mockResolvedValueOnce(mockFetchResponse(422));
+
+        const result = await manager.inviteUserByEmailToGroup(TEST_EMAIL, GROUP_ID);
+
+        expect(result).toBe(false);
+    });
+
+    test('returns false on network error', async () => {
+        fetchMock.mockRejectedValueOnce(new Error('Network error'));
+
+        const result = await manager.inviteUserByEmailToGroup(TEST_EMAIL, GROUP_ID);
+
+        expect(result).toBe(false);
+    });
+});
+
 describe('retry behavior', () => {
     test('retries on 429 and succeeds on second attempt', async () => {
         fetchMock

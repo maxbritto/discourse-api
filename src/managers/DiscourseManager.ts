@@ -96,4 +96,39 @@ export class DiscourseManager {
             return await this.updateGroupMembership(userForumName, groupId, false);
         }
     }
+
+    public async fetchGroupId(name: string): Promise<number> {
+        const apiEndpoint = `/groups/${name}.json`;
+        const { url, options } = this.prepareAuthenticatedRequest(apiEndpoint, 'GET');
+        const response = await this.fetchWithRetry(url, options);
+
+        if (!response.ok) {
+            const body = await response.text();
+            throw new Error(`Discourse fetchGroupId failed: ${response.status} ${response.statusText}. Body: ${body}`);
+        }
+
+        const data = await response.json();
+
+        if (!data.group || data.group.id === undefined) {
+            throw new Error(`Discourse fetchGroupId: no group data returned for "${name}"`);
+        }
+
+        return data.group.id;
+    }
+
+    public async inviteUserByEmailToGroup(email: string, groupId: number): Promise<boolean> {
+        const apiEndpoint = '/invites';
+        const { url, options } = this.prepareAuthenticatedRequest(apiEndpoint, 'POST');
+        options.headers = {
+            ...options.headers,
+            'Content-Type': 'application/json',
+        };
+        options.body = JSON.stringify({ email, group_ids: groupId, skip_email: false });
+        try {
+            const response = await this.fetchWithRetry(url, options);
+            return response.ok;
+        } catch (error) {
+            return false;
+        }
+    }
 }
