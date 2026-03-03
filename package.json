@@ -1,0 +1,20 @@
+{
+  "name": "discourse-api",
+  "version": "1.0.0",
+  "description": "Handles communication from and to a discourse forum",
+  "main": "src/index.ts",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "node node_modules/.bin/jest --runInBand"
+  },
+  "author": "Maxime Britto",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/jest": "^27.5.1",
+    "@types/node": "^18.0.0",
+    "jest": "^28.1.0",
+    "ts-jest": "^28.0.2"
+  }
+}
