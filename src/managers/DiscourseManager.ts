@@ -90,11 +90,44 @@ export class DiscourseManager {
 
     public async removeUserWithEmailFromGroup(userEmail: string, groupId:number): Promise<boolean> {
         const userForumName = await this.findUserForumNameByEmail(userEmail);
+        let result: boolean;
         if (userForumName === null) {
-            return false;
+            await this.revokeInviteByEmail(userEmail);
+            console.log(`removeUserWithEmailFromGroup: user ${userEmail} not found in Discourse, treating as already removed from group ${groupId}`);
+            result = true;
         } else {
-            return await this.updateGroupMembership(userForumName, groupId, false);
+            result = await this.updateGroupMembership(userForumName, groupId, false);
         }
+        return result;
+    }
+
+    public async revokeInviteByEmail(email: string): Promise<boolean> {
+        const { url: retrieveUrl, options: retrieveOptions } = this.prepareAuthenticatedRequest(`/invites/retrieve.json?email=${encodeURIComponent(email)}`, 'GET');
+        let result: boolean;
+        try {
+            const retrieveResponse = await this.fetchWithRetry(retrieveUrl, retrieveOptions);
+            const data = await retrieveResponse.json();
+            if (data.invite && data.invite.id !== undefined) {
+                const { url: destroyUrl, options: destroyOptions } = this.prepareAuthenticatedRequest('/invites', 'DELETE');
+                destroyOptions.headers = {
+                    ...destroyOptions.headers,
+                    'Content-Type': 'application/json',
+                };
+                destroyOptions.body = JSON.stringify({ id: data.invite.id });
+                const destroyResponse = await this.fetchWithRetry(destroyUrl, destroyOptions);
+                if (destroyResponse.ok) {
+                    console.log(`revokeInviteByEmail: invite for ${email} successfully revoked`);
+                }
+                result = destroyResponse.ok;
+            } else {
+                console.log(`revokeInviteByEmail: no pending invite found for ${email}`);
+                result = true;
+            }
+        } catch (error) {
+            console.error(`revokeInviteByEmail: error revoking invite for ${email}`, error);
+            result = false;
+        }
+        return result;
     }
 
     public async fetchGroupId(name: string): Promise<number> {

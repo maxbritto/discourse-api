@@ -72,12 +72,14 @@ describe('removeUserWithEmailFromGroup', () => {
         expect(result).toBe(true);
     });
 
-    test('returns false when user is not found', async () => {
-        fetchMock.mockResolvedValueOnce(mockFetchResponse(200, []));
+    test('returns true when user is not found', async () => {
+        fetchMock
+            .mockResolvedValueOnce(mockFetchResponse(200, []))
+            .mockResolvedValueOnce(mockFetchResponse(200, {}));
 
         const result = await manager.removeUserWithEmailFromGroup(TEST_EMAIL, GROUP_ID);
 
-        expect(result).toBe(false);
+        expect(result).toBe(true);
     });
 
     test('sends DELETE request for group membership', async () => {
@@ -293,5 +295,94 @@ describe('retry behavior', () => {
 
         expect(result).toBe(false);
         expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+});
+
+describe('revokeInviteByEmail', () => {
+    test('returns true when invite is found and successfully revoked', async () => {
+        fetchMock
+            .mockResolvedValueOnce(mockFetchResponse(200, { invite: { id: 99 } }))
+            .mockResolvedValueOnce(mockFetchResponse(200));
+
+        const result = await manager.revokeInviteByEmail(TEST_EMAIL);
+
+        expect(result).toBe(true);
+    });
+
+    test('returns true when no pending invite exists', async () => {
+        fetchMock.mockResolvedValueOnce(mockFetchResponse(200, {}));
+
+        const result = await manager.revokeInviteByEmail(TEST_EMAIL);
+
+        expect(result).toBe(true);
+    });
+
+    test('returns false on network error during invite retrieval', async () => {
+        fetchMock.mockRejectedValueOnce(new Error('Network error'));
+
+        const result = await manager.revokeInviteByEmail(TEST_EMAIL);
+
+        expect(result).toBe(false);
+    });
+
+    test('sends correct URL for invite retrieval', async () => {
+        fetchMock.mockResolvedValueOnce(mockFetchResponse(200, {}));
+
+        await manager.revokeInviteByEmail(TEST_EMAIL);
+
+        const url = fetchMock.mock.calls[0][0];
+        expect(url).toBe(`${BASE_URL}/invites/retrieve.json?email=${encodeURIComponent(TEST_EMAIL)}`);
+    });
+
+    test('returns false when invite destroy fails', async () => {
+        fetchMock
+            .mockResolvedValueOnce(mockFetchResponse(200, { invite: { id: 99 } }))
+            .mockResolvedValueOnce(mockFetchResponse(500));
+
+        const result = await manager.revokeInviteByEmail(TEST_EMAIL);
+
+        expect(result).toBe(false);
+    });
+
+    test('sends correct URL for invite destruction when invite found', async () => {
+        fetchMock
+            .mockResolvedValueOnce(mockFetchResponse(200, { invite: { id: 99 } }))
+            .mockResolvedValueOnce(mockFetchResponse(200));
+
+        await manager.revokeInviteByEmail(TEST_EMAIL);
+
+        const destroyUrl = fetchMock.mock.calls[1][0];
+        expect(destroyUrl).toBe(`${BASE_URL}/invites`);
+        const destroyOptions = fetchMock.mock.calls[1][1];
+        expect(destroyOptions.method).toBe('DELETE');
+        const body = JSON.parse(destroyOptions.body);
+        expect(body.id).toBe(99);
+    });
+});
+
+describe('removeUserWithEmailFromGroup calls revokeInviteByEmail when user not found', () => {
+    test('calls invite retrieve and destroy when user is absent from Discourse', async () => {
+        fetchMock
+            .mockResolvedValueOnce(mockFetchResponse(200, []))
+            .mockResolvedValueOnce(mockFetchResponse(200, { invite: { id: 55 } }))
+            .mockResolvedValueOnce(mockFetchResponse(200));
+
+        const result = await manager.removeUserWithEmailFromGroup(TEST_EMAIL, GROUP_ID);
+
+        expect(result).toBe(true);
+        const retrieveUrl = fetchMock.mock.calls[1][0];
+        expect(retrieveUrl).toBe(`${BASE_URL}/invites/retrieve.json?email=${encodeURIComponent(TEST_EMAIL)}`);
+        const destroyUrl = fetchMock.mock.calls[2][0];
+        expect(destroyUrl).toBe(`${BASE_URL}/invites`);
+    });
+
+    test('returns true even when revokeInviteByEmail finds no invite', async () => {
+        fetchMock
+            .mockResolvedValueOnce(mockFetchResponse(200, []))
+            .mockResolvedValueOnce(mockFetchResponse(200, {}));
+
+        const result = await manager.removeUserWithEmailFromGroup(TEST_EMAIL, GROUP_ID);
+
+        expect(result).toBe(true);
     });
 });
